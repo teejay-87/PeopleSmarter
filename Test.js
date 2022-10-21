@@ -15,6 +15,10 @@ if (this.Script) {
 }
 
 
+/* TODOs
+       - Sovrapposizione permessi e orario
+*/
+
 async function all() {
   let headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.87 Safari/537.36",
@@ -99,17 +103,27 @@ async function getMonthDataGroupedByDay(requestOptions, monthDate) {
     '378',  // FLEX PIU'
     '388'   // FLEX PIU' AUTORIZ. (da controllare il significato)
   ];
+  const evidencyCodeToConsiderAsWork = [
+    '323',  // MISS.P/CLIENT GG
+    '335',  // EVENTI/FIERE ITA GG
+    '334',  // PRESENTE
+  ];
 
   const weeks = getWeeksForMonth(monthDate);
 
   const data = await Promise.all(weeks.map((weekDate) => getWeekData(requestOptions, weekDate)));
 
-  const stampings = data.flatMap((weekData) => weekData.Stampings);
+  let stampings = data.flatMap((weekData) => weekData.Stampings);
   const evidencies = data.flatMap((weekData) => weekData.Evidencies);
 
-  const filterMonthCondition = (el) => el.StartTime.getMonth() === monthDate.getMonth();
-  const filterEvidenciesCondition = (el) => !evidencyCodeToIgnore.includes(el.Code);
+  const filterMonthCondition = (el) => (el.StartTime || el.EndTime).getMonth() === monthDate.getMonth();
+  const filterEvidenciesCondition = (el) => ![...evidencyCodeToIgnore, ...evidencyCodeToConsiderAsWork].includes(el.Code);
   const groupByKeySelector = (el) => (el.StartTime || el.EndTime).getDate();
+
+  // Also stuff stampings with evidencies to consider as work
+  const filterOnlyEvidenciesToConsiderAsWorkCondition = (el) => evidencyCodeToConsiderAsWork.includes(el.Code);
+  const evidenciesToConsiderAsWork = evidencies.filter((el) => filterMonthCondition(el) && filterOnlyEvidenciesToConsiderAsWorkCondition(el));
+  stampings = [...stampings, ...evidenciesToConsiderAsWork];
 
   const stampingsByDay = stampings.filter(filterMonthCondition).groupBy(groupByKeySelector);
   const evidenciesByDay = evidencies.filter((el) => filterMonthCondition(el) && filterEvidenciesCondition(el)).groupBy(groupByKeySelector);
